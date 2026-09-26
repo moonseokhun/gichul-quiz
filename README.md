@@ -6,5 +6,5 @@
 
 | 자격증 | 시험 수 | 문제 수 |
 |---|---:|---:|
-| [공인중개사 부동산공법](%EA%B3%B5%EC%9D%B8%EC%A4%91%EA%B0%9C%EC%82%AC%20%EB%B6%80%EB%8F%99%EC%82%B0%EA%B3%B5%EB%B2%95/) | 43 | 1880 | [바로 풀기](https://moonseokhun.github.io/gichul-quiz/c/gf4d01ad/)
-| [실내건축기사](%EC%8B%A4%EB%82%B4%EA%B1%B4%EC%B6%95%EA%B8%B0%EC%82%AC/) | 2 | 160 | [바로 풀기](https://moonseokhun.github.io/gichul-quiz/c/g26267d6/)
+| [공인중개사 부동산공법](%EA%B3%B5%EC%9D%B8%EC%A4%91%EA%B0%9C%EC%82%AC%20%EB%B6%80%EB%8F%99%EC%82%B0%EA%B3%B5%EB%B2%95/) | 43 | 1880 |
+| [실내건축기사](%EC%8B%A4%EB%82%B4%EA%B1%B4%EC%B6%95%EA%B8%B0%EC%82%AC/) | 3 | 280 |
