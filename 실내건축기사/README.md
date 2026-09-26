@@ -3,6 +3,7 @@
 | 시험 | 문제 수 | 갱신 |
 |---|---:|---|
 | [실내건축기사 2025년 1회](https://moonseokhun.github.io/gichul-quiz/#/e/e7a83574) | 80 | 2026-09-26 |
+| [실내건축기사 2024년 2회](https://moonseokhun.github.io/gichul-quiz/#/e/f67784ef) | 0 | 2026-09-26 |
 | [실내건축기사 2024년 1회](https://moonseokhun.github.io/gichul-quiz/#/e/8ff3897f) | 0 | 2026-09-26 |
 | [실내건축기사 2023년 4회](https://moonseokhun.github.io/gichul-quiz/#/e/44ae758f) | 80 | 2026-09-26 |
 | [실내건축기사 2023년 2회](https://moonseokhun.github.io/gichul-quiz/#/e/0922294a) | 80 | 2026-09-26 |

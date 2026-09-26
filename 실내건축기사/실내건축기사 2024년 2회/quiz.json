@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "group": "실내건축기사",
+ "cert": "실내건축기사",
+ "label": "2024년 2회",
+ "name": "실내건축기사 2024년 2회",
+ "source": "2024년 실내건축기사 _2회.pdf",
+ "updated": "2026-09-26",
+ "subject_size": 20,
+ "pass": {
+  "subject_min": 40,
+  "avg_min": 60
+ },
+ "questions": []
+}
