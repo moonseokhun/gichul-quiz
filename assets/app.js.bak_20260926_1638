@@ -191,27 +191,17 @@ function scoreChip(path) {
 async function viewCert(group) {
   const idx = await getIndex();
   const es = idx.exams.filter((e) => e.group === group);
-  const row = (e) => h('li', null,
+  const list = h('ul', { class: 'exam-list' }, es.map((e) => h('li', null,
     h('div', { class: 'nm' }, h('b', null, e.label || e.name), h('span', null, `${e.count}문제 · ${e.updated}`)),
     scoreChip(e.path),
-    h('a', { class: 'btn small', href: '#/q/' + encodeURIComponent(e.path) }, '풀기'));
-  // 한 그룹에 여러 과목(법령)이 섞여 있으면 과목별로 묶어서 1회부터
-  const rank = (c) => (/시행규칙/.test(c) ? 2 : /시행령/.test(c) ? 1 : 0);
-  const base = (c) => c.replace(/\s*(시행령|시행규칙)?\s*빈칸\s*$/, '');
-  const certs = [...new Set(es.map((e) => e.cert || group))].sort((x, y) => base(x).localeCompare(base(y), 'ko') || rank(x) - rank(y));
-  const multi = certs.length > 1;
-  const num = (e) => parseInt((e.label || '').replace(/\D+/g, ''), 10) || 0;
-  const list = !multi ? h('ul', { class: 'exam-list' }, es.map(row))
-    : h('div', null, certs.map((c) => h('section', { class: 'cert-sec' },
-      h('h3', null, c.replace(/\s*빈칸\s*$/, '')),
-      h('ul', { class: 'exam-list' }, es.filter((e) => (e.cert || group) === c).sort((x, y) => num(x) - num(y)).map(row)))));
+    h('a', { class: 'btn small', href: '#/q/' + encodeURIComponent(e.path) }, '풀기'))));
   mount(
     h('div', { class: 'headband' },
       h('button', { class: 'back', onclick: () => { location.hash = '#/'; } }, '← 전체 자격증'),
       h('span', { class: 'titlepill' }, group)),
     h('div', { class: 'card' },
       h('h2', null, group),
-      h('p', { class: 'meta' }, multi ? `${certs.length}과목 · 시험 ${es.length}회 · ${es.reduce((t, e) => t + e.count, 0)}문제` : `시험 ${es.length}회 · 최신 회차부터`),
+      h('p', { class: 'meta' }, `시험 ${es.length}회 · 최신 회차부터`),
       es.length ? list : h('p', { class: 'meta' }, '시험이 없습니다.')));
 }
 

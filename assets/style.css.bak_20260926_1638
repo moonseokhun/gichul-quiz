@@ -94,8 +94,6 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
 .exam-list li { display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-top: 1px solid var(--row-line); }
 .exam-list li:first-child { border-top: 0; }
 .exam-list .nm { flex: 1; min-width: 0; }
-.cert-sec + .cert-sec { margin-top: 18px; }
-.cert-sec h3 { margin: 0 0 2px; padding: 8px 12px; font-size: 17px; font-weight: 800; color: var(--navy-ink); background: var(--row); border-left: 4px solid var(--gold); border-radius: 8px; }
 .exam-list .nm b { display: block; font-size: 17px; color: var(--navy-ink); }
 .exam-list .nm span { color: var(--muted); font-size: 13px; }
 .score-chip { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: var(--row); color: var(--ink2); white-space: nowrap; }
