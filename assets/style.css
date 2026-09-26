@@ -169,6 +169,18 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
 .toggle.on { background: var(--gold); color: var(--navy-ink); }
 .feedback.wait { color: var(--navy-ink); }
 
+/* ── 수익 장치 ── */
+.money { max-width: 100%; margin-top: 14px; border-radius: var(--radius); }
+.money.sub { background: linear-gradient(135deg, #1f3f73, #122a52); border: 2px solid var(--gold); padding: 18px 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+.money.sub p { margin: 0; color: var(--white); font-weight: 600; flex: 1 1 220px; }
+.btn.sub { background: #ff3b3b; color: #fff; }
+.btn.sub:hover { background: #ff5a5a; }
+.money.books { background: var(--card); color: var(--ink); padding: 16px 20px; box-shadow: 0 10px 26px rgba(3, 10, 28, .3); }
+.money.books ul { margin: 8px 0 4px; padding-left: 18px; }
+.money.books a { color: var(--navy-ink); font-weight: 700; }
+.money .disclosure { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.money.ad { background: var(--card); padding: 8px; min-height: 60px; }
+
 /* ── 결과 ── */
 .score { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 4px; }
 .score b { font-size: 64px; font-weight: 800; color: var(--navy-ink); line-height: 1; }

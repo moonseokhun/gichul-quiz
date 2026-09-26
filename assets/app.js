@@ -52,6 +52,44 @@ function readQuestion(q) {
   speak(parts.join(' '));
 }
 
+// ── 수익 장치 (site.json: 구독 버튼 · 추천 교재 · 광고 · 후원) ─────────────────
+let SITE = {};
+fetch('site.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : {})).then((d) => {
+  SITE = d || {};
+  if (SITE.adsense_client) {
+    const s = document.createElement('script');
+    s.async = true; s.crossOrigin = 'anonymous';
+    s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(SITE.adsense_client);
+    document.head.append(s);
+  }
+}).catch(() => {});
+function subscribeBox(note) {
+  if (!SITE.channel) return null;
+  return h('div', { class: 'money sub' },
+    h('p', null, note || '매 회차 새 영상이 올라와요. 귀로 듣고, 여기서 풀어 보세요.'),
+    h('a', { class: 'btn sub', href: SITE.channel + '?sub_confirmation=1', target: '_blank', rel: 'noopener' },
+      '🔔 ' + (SITE.subscribe_text || '유튜브 구독하기')));
+}
+function booksBox(group) {
+  const list = (SITE.books || {})[group] || [];
+  if (!list.length) return null;
+  return h('div', { class: 'money books' },
+    h('b', null, '📚 추천 교재'),
+    h('ul', null, list.map((b) => h('li', null, h('a', { href: b.url, target: '_blank', rel: 'noopener sponsored' }, b.title)))),
+    SITE.book_disclosure ? h('p', { class: 'disclosure' }, SITE.book_disclosure) : null);
+}
+function adBox() {
+  if (!SITE.adsense_client || !SITE.adsense_slot) return null;
+  const ins = h('ins', { class: 'adsbygoogle', style: 'display:block', 'data-ad-client': SITE.adsense_client,
+    'data-ad-slot': SITE.adsense_slot, 'data-ad-format': 'auto', 'data-full-width-responsive': 'true' });
+  setTimeout(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) { /* 광고 차단 */ } }, 50);
+  return h('div', { class: 'money ad' }, ins);
+}
+function supportLink() {
+  if (!SITE.support_url) return null;
+  return h('a', { class: 'btn ghost', href: SITE.support_url, target: '_blank', rel: 'noopener' }, SITE.support_text || '후원하기');
+}
+
 // ── 데이터 ─────────────────────────────────────────────────────────────────
 let INDEX = null;
 const QUIZ = {};
@@ -133,7 +171,8 @@ async function viewHome() {
       h('p', null, '눈 감고 들어도 합격하는 모든 자격증 기출문제 — 직접 풀어 보세요'),
       h('div', { class: 'chips' },
         [...groups.keys()].slice(0, 6).map((g) => h('a', { class: 'chip', href: '#/c/' + encodeURIComponent(g) }, g)),
-        h('span', { class: 'chip fill' }, `총 ${idx.exams.reduce((s, e) => s + e.count, 0)}문제`))));
+        h('span', { class: 'chip fill' }, `총 ${idx.exams.reduce((s, e) => s + e.count, 0)}문제`),
+        SITE.channel ? h('a', { class: 'chip', href: SITE.channel, target: '_blank', rel: 'noopener' }, '▶ 유튜브 채널') : null)));
   if (!groups.size) return mount(hero, h('p', { class: 'empty' }, '아직 올라온 시험이 없습니다.'));
   const grid = h('div', { class: 'grid' },
     [...groups.entries()].map(([g, es]) => h('a', { class: 'cert', href: '#/c/' + encodeURIComponent(g) },
@@ -203,7 +242,9 @@ async function viewStart(path) {
       h('div', { class: 'actions' },
         h('button', { class: 'btn', onclick: () => startPlay(path, quiz, opt, null) }, '▶ 시작'),
         wrong.size ? h('button', { class: 'btn ghost', onclick: () => startPlay(path, quiz, opt, wrong) }, `틀린 문제만 다시 (${wrong.size})`) : null),
-      h('p', { class: 'hint' }, '모의고사는 실제 시험처럼 다 풀고 "답안 제출"을 누르면 바로 합격·불합격이 나옵니다. 키보드: 1~5 보기 · Enter 다음 · ← 이전 · S 듣기')));
+      h('p', { class: 'hint' }, '모의고사는 실제 시험처럼 다 풀고 "답안 제출"을 누르면 바로 합격·불합격이 나옵니다. 키보드: 1~5 보기 · Enter 다음 · ← 이전 · S 듣기')),
+    booksBox(group),
+    adBox());
 }
 
 // ── 풀기 ───────────────────────────────────────────────────────────────────
@@ -427,7 +468,11 @@ function renderResult() {
         wrongList.length ? h('button', { class: 'btn', onclick: () => startPlay(path, quiz, { order: 'seq', subject: 'all', mode: 'solve' }, new Set(wrongList.map((w) => w.q.no))) },
           (wrongList.some((w) => w.pick == null) ? '틀리거나 안 푼 문제' : '틀린 문제') + ` 다시 (${wrongList.length})`) : null,
         h('button', { class: 'btn ghost', onclick: () => viewStart(path) }, '처음부터 다시'),
-        h('a', { class: 'btn ghost', href: '#/c/' + encodeURIComponent(group) }, '다른 회차'))),
+        h('a', { class: 'btn ghost', href: '#/c/' + encodeURIComponent(group) }, '다른 회차'),
+        supportLink())),
+    subscribeBox(P.full ? (pass ? '합격권이에요! 다음 회차도 귀로 들으며 굳혀 보세요.' : '틀린 문제는 영상으로 한 번 더 들으면 오래 남아요.') : null),
+    booksBox(group),
+    adBox(),
     wrongList.length ? h('div', { class: 'card' },
       h('h2', null, '오답 노트'),
       h('ul', { class: 'review' }, wrongList.map(({ q, pick }) => h('li', null,
