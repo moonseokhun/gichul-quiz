@@ -21,7 +21,8 @@ function h(tag, props, ...kids) {
   }
   return el;
 }
-function mount(...nodes) { app.replaceChildren(...nodes); window.scrollTo(0, 0); }
+const kids = (xs) => xs.flat(Infinity).filter((x) => x != null && x !== false);
+function mount(...nodes) { app.replaceChildren(...kids(nodes)); window.scrollTo(0, 0); }
 const encPath = (p) => p.split('/').map(encodeURIComponent).join('/');
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -92,16 +93,22 @@ let PLAY = null;   // 푸는 중인 상태
 async function route() {
   stopSpeak();
   stopClock();
+  stopWatch();
   PLAY = null;
   const hash = location.hash.replace(/^#\/?/, '');
   try {
     if (hash.startsWith('c/')) return await viewCert(decodeURIComponent(hash.slice(2)));
     if (hash.startsWith('q/')) return await viewStart(decodeURIComponent(hash.slice(2)));
     if (hash.startsWith('e/')) {
-      // 영상 설명란·QR의 짧은 주소
+      // 영상 설명란·댓글·QR의 짧은 주소 (#/e/<회차>/<문제번호> 면 그 문제부터 영상과 함께)
+      const [eid, qn] = hash.slice(2).split('/');
       const idx = await getIndex();
-      const ex = idx.exams.find((x) => x.id === hash.slice(2));
+      const ex = idx.exams.find((x) => x.id === eid);
       if (!ex) throw new Error('이 회차를 찾지 못했습니다. 전체 자격증에서 골라 주세요.');
+      if (qn) {
+        const quiz = await getQuiz(ex.path);
+        if (watchable(quiz)) return await viewWatch(ex.path, quiz, +qn);
+      }
       return await viewStart(ex.path);
     }
     return await viewHome();
@@ -182,6 +189,10 @@ async function viewStart(path) {
       h('span', { class: 'titlepill' }, quiz.name)),
     h('div', { class: 'card' },
       h('h2', null, quiz.name),
+      watchable(quiz) ? h('button', { class: 'btn watch', onclick: () => viewWatch(path, quiz, 0) }, '▶ 영상 보면서 풀기') : null,
+      watchable(quiz) ? h('p', { class: 'hint first' }, '영상이 문제를 읽으면 아래에 보기가 떠요. 누르면 바로 채점되고, 답할 때까지 영상이 기다려 줘요.') : null,
+      !watchable(quiz) && quiz.video && quiz.video.youtube
+        ? h('a', { class: 'btn ghost', href: `https://youtu.be/${quiz.video.youtube}`, target: '_blank', rel: 'noopener' }, '유튜브에서 영상 보기') : null,
       h('p', { class: 'meta' }, `${quiz.questions.length}문제 · 합격 기준: ${passText(quiz)}`
         + (st.best ? ` · 최고 ${st.best.score}점${st.best.pass != null ? (st.best.pass ? ' 합격' : ' 불합격') : ''}` : '')),
       h('div', { class: 'opt' }, h('span', null, '방식'), seg('mode', [
@@ -339,6 +350,7 @@ function renderMemoEnd() {
 // ── 결과 ───────────────────────────────────────────────────────────────────
 function renderResult() {
   const P = PLAY;
+  if (P.watch) stopWatch();
   const qs = P.quiz.questions;
   let correct = 0;
   const wrongList = [];
@@ -428,10 +440,156 @@ function renderResult() {
   PLAY = null;
 }
 
+// ── 영상 보면서 풀기: 유튜브 재생 위치에 맞춰 그 문제의 보기가 뜬다 ─────────────
+function watchable(quiz) {
+  return !!(quiz.video && quiz.video.youtube && (quiz.video.timeline || []).length);
+}
+let YT_P = null;
+function loadYT() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (!YT_P) {
+    YT_P = new Promise((res, rej) => {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (prev) prev(); res(); };
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      s.onerror = () => { YT_P = null; rej(new Error('유튜브 플레이어를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.')); };
+      document.head.append(s);
+    });
+  }
+  return YT_P;
+}
+let WATCH = null;
+function stopWatch() {
+  if (!WATCH) return;
+  clearInterval(WATCH.timer);
+  try { WATCH.player.destroy(); } catch (e) { /* 이미 사라짐 */ }
+  WATCH = null;
+}
+
+async function viewWatch(path, quiz, startNo) {
+  stopWatch();
+  const tl = quiz.video.timeline;
+  const at = new Map(quiz.questions.map((q, i) => [q.no, i]));
+  PLAY = { path, quiz, order: tl.map((t) => at.get(t.no)), i: -1, phase: '', picks: {}, full: true,
+           watch: true, tl, t0: Date.now(), hold: store.get('gichul:hold', true), waiting: -1 };
+  const P = PLAY;
+  const group = path.split('/')[0];
+  const holdBtn = h('button', { class: 'toggle' + (P.hold ? ' on' : ''), onclick: () => {
+    P.hold = !P.hold; store.set('gichul:hold', P.hold);
+    holdBtn.className = 'toggle' + (P.hold ? ' on' : '');
+    holdBtn.textContent = P.hold ? '답할 때까지 멈춤 켬' : '답할 때까지 멈춤';
+  } }, P.hold ? '답할 때까지 멈춤 켬' : '답할 때까지 멈춤');
+  mount(
+    h('div', { class: 'headband' },
+      h('button', { class: 'back', onclick: () => { location.hash = '#/c/' + encodeURIComponent(group); } }, '← ' + group),
+      h('span', { class: 'titlepill' }, quiz.name)),
+    h('div', { class: 'player' }, h('div', { id: 'yt' })),
+    h('div', { class: 'watchbar' },
+      h('span', { class: 'wscore', id: 'wscore' }, `전체 ${tl.length}문제`),
+      holdBtn,
+      h('button', { class: 'btn small', onclick: () => renderResult() }, '채점 · 합격 확인')),
+    h('div', { class: 'card', id: 'wq' },
+      h('p', { class: 'meta' }, '▶ 영상을 재생하면 문제가 여기에 나와요. 보기를 누르면 바로 채점돼요.')));
+  window.scrollTo(0, 0);
+  await loadYT();
+  if (PLAY !== P) return;                                // 기다리는 사이 다른 화면으로 갔으면 중단
+  const first = startNo ? tl.find((t) => t.no === startNo) : null;
+  const player = new YT.Player('yt', {
+    videoId: quiz.video.youtube,
+    playerVars: { playsinline: 1, rel: 0, modestbranding: 1, start: first ? Math.floor(first.start) : 0 },
+  });
+  WATCH = { player, timer: setInterval(watchTick, 200) };
+}
+
+function watchTick() {
+  const P = PLAY;
+  if (!P || !P.watch || !WATCH) return;
+  const pl = WATCH.player;
+  if (!pl || typeof pl.getCurrentTime !== 'function') return;
+  const t = pl.getCurrentTime() || 0;
+  const k = P.tl.findIndex((x) => t >= x.start && t < x.end);
+  const phase = k < 0 ? (t >= P.tl[P.tl.length - 1].end ? 'end' : '') : (t >= P.tl[k].reveal ? 'reveal' : 'ask');
+  // 답을 안 골랐으면 정답 공개 직전에 영상을 잠깐 멈춘다
+  if (k >= 0 && phase === 'ask' && P.hold && P.picks[k] == null
+      && t >= P.tl[k].reveal - 0.7 && pl.getPlayerState && pl.getPlayerState() === 1) {
+    pl.pauseVideo();
+    P.waiting = k;
+    renderWatchQ();
+  }
+  if (k !== P.i || phase !== P.phase) { P.i = k; P.phase = phase; renderWatchQ(); }
+}
+
+function watchPick(n) {
+  const P = PLAY;
+  const k = P.i;
+  if (k < 0 || P.picks[k] != null) return;
+  P.picks[k] = n;
+  if (P.waiting === k) {
+    P.waiting = -1;
+    try { WATCH.player.playVideo(); } catch (e) { /* 플레이어 준비 전 */ }
+  }
+  renderWatchQ();
+}
+
+function renderWatchQ() {
+  const P = PLAY;
+  const box = document.getElementById('wq');
+  if (!P || !box) return;
+  const vals = Object.entries(P.picks);
+  const good = vals.filter(([k, v]) => P.quiz.questions[P.order[+k]].answer === v).length;
+  const sc = document.getElementById('wscore');
+  if (sc) sc.textContent = `맞힘 ${good} · 푼 문제 ${vals.length} / ${P.tl.length}`;
+  if (P.i < 0) {
+    box.replaceChildren(P.phase === 'end'
+      ? h('div', null, h('h2', null, '영상 끝!'), h('p', { class: 'meta' }, '채점하고 합격인지 확인해 보세요.'),
+          h('button', { class: 'btn', onclick: () => renderResult() }, '채점 · 합격 확인'))
+      : h('p', { class: 'meta' }, '▶ 영상을 재생하면 문제가 여기에 나와요. 보기를 누르면 바로 채점돼요.'));
+    return;
+  }
+  const k = P.i;
+  const q = P.quiz.questions[P.order[k]];
+  const picked = P.picks[k];
+  const done = picked != null || P.phase === 'reveal';
+  const ans = q.answer;
+  const mk = (n, label) => {
+    let cls = 'choice';
+    if (done) cls += n === ans ? ' correct' : n === picked ? ' wrong' : ' dim';
+    return h('button', { class: cls, disabled: done, onclick: () => watchPick(n) },
+      h('span', { class: 'num' }, n), label != null ? h('span', { class: 'tx' }, label) : null,
+      done && n === ans && label != null ? h('span', { class: 'tag' }, '정답') : null);
+  };
+  const choiceBox = q.choices && q.choices.length
+    ? h('div', { class: 'choices' }, q.choices.map((t, i) => mk(i + 1, t)))
+    : h('div', { class: 'numrow' }, Array.from({ length: q.n || 4 }, (_, i) => mk(i + 1, null)));
+  let fb = null;
+  if (picked != null) fb = picked === ans ? h('p', { class: 'feedback ok' }, '정답입니다!') : h('p', { class: 'feedback no' }, `아쉬워요 — 정답은 ${ans}번`);
+  else if (P.phase === 'reveal') fb = h('p', { class: 'feedback' }, `정답은 ${ans}번 (안 풂)`);
+  else if (P.waiting === k) fb = h('p', { class: 'feedback wait' }, '⏸ 답을 고르면 영상이 이어져요');
+  const seek = (kk) => { if (kk >= 0 && kk < P.tl.length && WATCH) { WATCH.player.seekTo(P.tl[kk].start, true); WATCH.player.playVideo(); } };
+  box.replaceChildren(...kids([
+    h('div', { class: 'qhead' },
+      h('span', { class: 'qbadge' }, `Q ${k + 1}`),
+      h('span', { class: 'qcount' }, `/ ${P.tl.length}`),
+      q.subject != null ? h('span', { class: 'qsubj' }, subjName(q.subject)) : null),
+    q.stem ? h('p', { class: 'stem' }, q.stem) : null,
+    q.box && q.box.length ? h('div', { class: 'qbox' }, q.box.map((t) => h('p', null, t))) : null,
+    q.images && q.images.length ? h('p', { class: 'meta' }, '그림은 영상 화면을 보세요.') : null,
+    choiceBox,
+    fb,
+    h('div', { class: 'qfoot' },
+      h('button', { class: 'btn ghost', disabled: k === 0, onclick: () => seek(k - 1) }, '← 이전 문제'),
+      h('button', { class: 'btn ghost', disabled: k === P.tl.length - 1, onclick: () => seek(k + 1) }, '다음 문제 →'))]));
+}
+
 // ── 키보드 ─────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
   if (!PLAY || e.ctrlKey || e.metaKey || e.altKey) return;
   const P = PLAY;
+  if (P.watch) {
+    if (/^[1-5]$/.test(e.key) && P.i >= 0) watchPick(+e.key);
+    return;
+  }
   const q = P.quiz.questions[P.order[P.i]];
   const cnt = (q.choices && q.choices.length) || q.n || 4;
   if (/^[1-5]$/.test(e.key) && +e.key <= cnt && (P.picks[P.i] == null || P.exam) && !P.memo) {
