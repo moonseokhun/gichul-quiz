@@ -71,10 +71,27 @@ async function getQuiz(path) {
   return QUIZ[path];
 }
 
+// ── 합격 기준 ──────────────────────────────────────────────────────────────
+// 기사·산업기사·공인중개사·주택관리사: 과목마다 40점 이상 + 전 과목 평균 60점 이상
+// 기능사: 100점 만점 60점 이상 (과락 없음)
+function passRule(quiz) {
+  if (quiz.pass) return quiz.pass;
+  return /기능사/.test((quiz.cert || '') + (quiz.name || '')) ? { subject_min: 0, avg_min: 60 } : { subject_min: 40, avg_min: 60 };
+}
+function passText(quiz) {
+  const r = passRule(quiz);
+  return r.subject_min ? `과목별 ${r.subject_min}점 이상 · 평균 ${r.avg_min}점 이상` : `${r.avg_min}점 이상`;
+}
+const subjName = (s) => (typeof s === 'number' ? `${s}과목` : String(s));
+const fmtTime = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}분 ${String(s % 60).padStart(2, '0')}초`; };
+let CLOCK = null;
+function stopClock() { if (CLOCK) { clearInterval(CLOCK); CLOCK = null; } }
+
 // ── 라우팅 ─────────────────────────────────────────────────────────────────
 let PLAY = null;   // 푸는 중인 상태
 async function route() {
   stopSpeak();
+  stopClock();
   PLAY = null;
   const hash = location.hash.replace(/^#\/?/, '');
   try {
@@ -122,7 +139,8 @@ async function viewHome() {
 function scoreChip(path) {
   const st = store.get(examKey(path), null);
   if (!st || !st.best) return h('span', { class: 'score-chip' }, '안 풀어봄');
-  return h('span', { class: 'score-chip' + (st.best.score >= 60 ? ' good' : '') }, `최고 ${st.best.score}점`);
+  const passed = st.best.pass != null ? st.best.pass : st.best.score >= 60;
+  return h('span', { class: 'score-chip' + (passed ? ' good' : ' bad') }, `${passed ? '합격' : '불합격'} ${st.best.score}점`);
 }
 async function viewCert(group) {
   const idx = await getIndex();
@@ -147,7 +165,7 @@ async function viewStart(path) {
   const st = store.get(examKey(path), {});
   const wrong = new Set(st.wrong || []);
   const subjects = [...new Set(quiz.questions.map((q) => q.subject).filter((s) => s != null))];
-  const opt = { order: 'seq', subject: 'all', mode: store.get('gichul:mode', 'solve') };
+  const opt = { order: 'seq', subject: 'all', mode: store.get('gichul:mode', 'exam') };
 
   function seg(key, items) {
     const box = h('div', { class: 'seg' });
@@ -164,15 +182,17 @@ async function viewStart(path) {
       h('span', { class: 'titlepill' }, quiz.name)),
     h('div', { class: 'card' },
       h('h2', null, quiz.name),
-      h('p', { class: 'meta' }, `${quiz.questions.length}문제` + (st.best ? ` · 최고 ${st.best.score}점` : '')),
-      h('div', { class: 'opt' }, h('span', null, '방식'), seg('mode', [['solve', '풀기 (채점)'], ['memo', '암기 (정답 바로 보기)']])),
+      h('p', { class: 'meta' }, `${quiz.questions.length}문제 · 합격 기준: ${passText(quiz)}`
+        + (st.best ? ` · 최고 ${st.best.score}점${st.best.pass != null ? (st.best.pass ? ' 합격' : ' 불합격') : ''}` : '')),
+      h('div', { class: 'opt' }, h('span', null, '방식'), seg('mode', [
+        ['exam', '모의고사 (끝나고 합격·불합격)'], ['solve', '풀기 (한 문제씩 바로 채점)'], ['memo', '암기 (정답 바로 보기)']])),
       h('div', { class: 'opt' }, h('span', null, '순서'), seg('order', [['seq', '순서대로'], ['shuffle', '섞어서']])),
       subjects.length > 1 ? h('div', { class: 'opt' }, h('span', null, '범위'),
         seg('subject', [['all', '전체'], ...subjects.map((s) => [String(s), subjLabel(s)])])) : null,
       h('div', { class: 'actions' },
-        h('button', { class: 'btn', onclick: () => startPlay(path, quiz, opt, null) }, '▶ 풀기 시작'),
+        h('button', { class: 'btn', onclick: () => startPlay(path, quiz, opt, null) }, '▶ 시작'),
         wrong.size ? h('button', { class: 'btn ghost', onclick: () => startPlay(path, quiz, opt, wrong) }, `틀린 문제만 다시 (${wrong.size})`) : null),
-      h('p', { class: 'hint' }, '키보드: 1~5 보기 선택 · Enter 다음 · ← 이전 · S 듣기 · 암기 모드는 Enter로 빠르게 넘기세요')));
+      h('p', { class: 'hint' }, '모의고사는 실제 시험처럼 다 풀고 "답안 제출"을 누르면 바로 합격·불합격이 나옵니다. 키보드: 1~5 보기 · Enter 다음 · ← 이전 · S 듣기')));
 }
 
 // ── 풀기 ───────────────────────────────────────────────────────────────────
@@ -183,8 +203,16 @@ function startPlay(path, quiz, opt, onlyNos) {
   if (opt.order === 'shuffle') shuffle(order);
   if (!order.length) return;
   store.set('gichul:mode', opt.mode);
+  stopClock();
   PLAY = { path, quiz, order, i: 0, picks: {}, full: opt.subject === 'all' && !onlyNos,
-           memo: opt.mode === 'memo', auto: store.get('gichul:autoRead', false) };
+           subject: opt.subject, memo: opt.mode === 'memo', exam: opt.mode === 'exam',
+           t0: Date.now(), auto: store.get('gichul:autoRead', false) };
+  if (PLAY.exam) {
+    CLOCK = setInterval(() => {
+      const el = document.getElementById('clock');
+      if (el && PLAY) el.textContent = '⏱ ' + fmtTime(Date.now() - PLAY.t0);
+    }, 1000);
+  }
   renderPlay();
 }
 
@@ -192,11 +220,12 @@ function renderPlay() {
   const P = PLAY;
   const q = P.quiz.questions[P.order[P.i]];
   const picked = P.memo ? q.answer : P.picks[P.i];
-  const done = P.memo || picked != null;
+  const done = P.memo || (!P.exam && picked != null);
   const total = P.order.length;
   const ans = q.answer;
 
   const onPick = (n) => {
+    if (P.exam) { P.picks[P.i] = n; renderPlay(); return; }     // 모의고사: 제출 전까지 바꿀 수 있음
     if (P.picks[P.i] != null) return;
     P.picks[P.i] = n;
     renderPlay();
@@ -209,6 +238,7 @@ function renderPlay() {
       const n = k + 1;
       let cls = 'choice';
       if (done) cls += n === ans ? ' correct' : n === picked ? ' wrong' : ' dim';
+      else if (P.exam && n === picked) cls += ' picked';
       return h('button', { class: cls, disabled: done, onclick: () => onPick(n) },
         h('span', { class: 'num' }, n), h('span', { class: 'tx' }, t),
         done && n === ans ? h('span', { class: 'tag' }, '정답') : null);
@@ -219,12 +249,15 @@ function renderPlay() {
       const n = k + 1;
       let cls = 'choice';
       if (done) cls += n === ans ? ' correct' : n === picked ? ' wrong' : ' dim';
+      else if (P.exam && n === picked) cls += ' picked';
       return h('button', { class: cls, disabled: done, onclick: () => onPick(n) }, h('span', { class: 'num' }, n));
     }));
   }
 
   let fb = null;
-  if (P.memo) {
+  if (P.exam) {
+    fb = null;
+  } else if (P.memo) {
     fb = q.answer ? null : h('p', { class: 'feedback' }, '이 문제는 정답 정보가 없습니다.');
   } else if (done) {
     if (!ans) fb = h('p', { class: 'feedback' }, '이 문제는 정답 정보가 없습니다.');
@@ -243,12 +276,14 @@ function renderPlay() {
   mount(
     h('div', { class: 'headband' },
       h('button', { class: 'back', onclick: () => { if (confirm('풀이를 그만두고 나갈까요?')) route(); } }, '← 그만두기'),
+      P.exam ? h('span', { class: 'clock', id: 'clock' }, '⏱ ' + fmtTime(Date.now() - P.t0)) : null,
       h('span', { class: 'titlepill' }, P.quiz.name)),
     h('div', { class: 'bar' }, h('i', { style: `width:${((P.i + 1) / total) * 100}%` })),
     h('div', { class: 'card' },
       h('div', { class: 'qhead' },
         h('span', { class: 'qbadge' }, `Q ${P.i + 1}`),
-        h('span', { class: 'qcount' }, `/ ${total}`),
+        h('span', { class: 'qcount' }, `/ ${total}`
+          + (P.exam ? ` · 푼 문제 ${Object.keys(P.picks).length}` : '')),
         q.subject != null ? h('span', { class: 'qsubj' }, typeof q.subject === 'number' ? `${q.subject}과목` : q.subject) : null,
         speakBtns),
       q.stem ? h('p', { class: 'stem' }, q.stem) : null,
@@ -259,7 +294,8 @@ function renderPlay() {
       fb,
       h('div', { class: 'qfoot' },
         h('button', { class: 'btn ghost', disabled: P.i === 0, onclick: () => { P.i--; stopSpeak(); renderPlay(); } }, '← 이전'),
-        h('button', { class: 'btn', onclick: next }, last ? (P.memo ? '끝' : '결과 보기') : '다음 문제 →'))));
+        P.exam && !last ? h('button', { class: 'btn ghost submit', onclick: submitExam }, '답안 제출') : null,
+        h('button', { class: 'btn', onclick: next }, last ? (P.memo ? '끝' : P.exam ? '답안 제출 · 채점' : '결과 보기') : '다음 문제 →'))));
   if (P.auto && P.memo && q.answer) {
     const t = (q.choices || [])[q.answer - 1] || '';
     speak(`${q.stem || ''} 정답은 ${NUM_WORD[q.answer] || q.answer + '번'}. ${t}`);
@@ -269,7 +305,16 @@ function renderPlay() {
 function next() {
   const P = PLAY;
   stopSpeak();
-  if (P.i < P.order.length - 1) { P.i++; renderPlay(); } else if (P.memo) { renderMemoEnd(); } else { renderResult(); }
+  if (P.i < P.order.length - 1) { P.i++; renderPlay(); } else if (P.memo) { renderMemoEnd(); } else if (P.exam) { submitExam(); } else { renderResult(); }
+}
+
+// 모의고사 제출 → 바로 채점 · 합격/불합격
+function submitExam() {
+  const P = PLAY;
+  const left = P.order.length - Object.keys(P.picks).length;
+  if (left > 0 && !confirm(`안 푼 문제가 ${left}개 있어요. 제출하고 바로 채점할까요?`)) return;
+  stopClock();
+  renderResult();
 }
 
 // 암기 모드 끝: 채점 없이 다시 보기 / 풀기로 확인
@@ -322,23 +367,34 @@ function renderResult() {
     if (q.answer && P.picks[k] === q.answer) wrong.delete(q.no); else wrong.add(q.no);
   });
   st.wrong = [...wrong];
-  if (P.full && (!st.best || score > st.best.score)) st.best = { score, date: new Date().toISOString().slice(0, 10) };
   store.set(key, st);
 
-  // 과목별 (전체 풀이일 때 합격 기준: 평균 60점 · 과목 40점 이상)
-  const subjRows = [...bySubj.entries()].map(([s, v]) => {
-    const pct = Math.round((v.c / v.n) * 100);
-    return { s, pct, row: h('div', { class: 'subj' },
-      h('span', null, typeof s === 'number' ? `${s}과목` : s),
-      h('span', { class: 't' }, h('i', { class: pct < 40 ? 'low' : '', style: `width:${pct}%` })),
-      h('span', null, `${pct}점`)) };
-  });
+  // 과목별 점수 → 합격/불합격 (과목별 40점 이상 · 평균 60점 이상, 기능사는 60점 이상)
+  const rule = passRule(P.quiz);
+  const subj = [...bySubj.entries()].map(([s, v]) => ({ s, pct: Math.round((v.c / v.n) * 1000) / 10 }));
+  const avg = subj.length ? Math.round(subj.reduce((a, r) => a + r.pct, 0) / subj.length * 10) / 10 : score;
+  const failSubj = rule.subject_min ? subj.filter((r) => r.pct < rule.subject_min) : [];
+  const pass = avg >= rule.avg_min && failSubj.length === 0;
+  const subjRows = subj.map((r) => h('div', { class: 'subj' },
+    h('span', null, subjName(r.s)),
+    h('span', { class: 't' }, h('i', { class: r.pct < (rule.subject_min || 0) ? 'low' : '', style: `width:${r.pct}%` })),
+    h('span', { class: r.pct < (rule.subject_min || 0) ? 'cut' : '' }, `${r.pct}점` + (r.pct < (rule.subject_min || 0) ? ' 과락' : ''))));
   let verdict = null;
   if (P.full) {
-    const numeric = subjRows.filter((r) => typeof r.s === 'number');
-    const pass = score >= 60 && numeric.every((r) => r.pct >= 40);
-    verdict = h('span', { class: 'chip verdict' + (pass ? ' fill' : '') },
-      pass ? '합격권이에요!' : (score >= 60 ? '과락 과목이 있어요' : '조금만 더!'));
+    const why = pass ? `평균 ${avg}점 · 과락 없음`
+      : (failSubj.length ? `${failSubj.map((r) => subjName(r.s)).join(', ')} 과락 (${rule.subject_min}점 미만)` : '')
+        + (avg < rule.avg_min ? `${failSubj.length ? ' · ' : ''}평균 ${avg}점 (${rule.avg_min}점 미만)` : '');
+    verdict = h('div', { class: 'verdict-box' },
+      h('div', { class: 'stamp ' + (pass ? 'pass' : 'fail') }, pass ? '합격' : '불합격'),
+      h('div', { class: 'why' }, h('b', null, why), h('span', null, `합격 기준: ${passText(P.quiz)}`)));
+  } else if (P.subject !== 'all' && rule.subject_min) {
+    const ok = score >= rule.subject_min;
+    verdict = h('p', { class: 'feedback ' + (ok ? 'ok' : 'no') },
+      `${subjName(P.subject.match(/^\d+$/) ? +P.subject : P.subject)} ${score}점 — ${ok ? '과락 통과' : `과락 (${rule.subject_min}점 미만)`}`);
+  }
+  if (P.full) {
+    st.best = (!st.best || avg > st.best.score) ? { score: avg, pass, date: new Date().toISOString().slice(0, 10) } : st.best;
+    store.set(key, st);
   }
 
   const group = P.path.split('/')[0];
@@ -349,10 +405,12 @@ function renderResult() {
       h('button', { class: 'back', onclick: () => { location.hash = '#/c/' + encodeURIComponent(group); } }, '← ' + group),
       h('span', { class: 'titlepill' }, quiz.name)),
     h('div', { class: 'card' },
-      h('h2', null, '결과'),
-      h('div', { class: 'score' }, h('b', null, score), h('span', null, `점 · ${correct} / ${total} 정답`)),
+      h('h2', null, P.exam ? '모의고사 결과' : '결과'),
       verdict,
-      subjRows.length > 1 ? subjRows.map((r) => r.row) : null,
+      h('div', { class: 'score' }, h('b', null, P.full ? avg : score),
+        h('span', null, `점${P.full && subj.length > 1 ? ' (과목 평균)' : ''} · ${correct} / ${total} 정답`
+          + (P.exam ? ` · ${fmtTime(Date.now() - P.t0)}` : ''))),
+      subjRows.length > 1 ? subjRows : null,
       h('div', { class: 'actions' },
         wrongList.length ? h('button', { class: 'btn', onclick: () => startPlay(path, quiz, { order: 'seq', subject: 'all', mode: 'solve' }, new Set(wrongList.map((w) => w.q.no))) },
           (wrongList.some((w) => w.pick == null) ? '틀리거나 안 푼 문제' : '틀린 문제') + ` 다시 (${wrongList.length})`) : null,
@@ -376,7 +434,7 @@ document.addEventListener('keydown', (e) => {
   const P = PLAY;
   const q = P.quiz.questions[P.order[P.i]];
   const cnt = (q.choices && q.choices.length) || q.n || 4;
-  if (/^[1-5]$/.test(e.key) && +e.key <= cnt && P.picks[P.i] == null && !P.memo) {
+  if (/^[1-5]$/.test(e.key) && +e.key <= cnt && (P.picks[P.i] == null || P.exam) && !P.memo) {
     const btns = app.querySelectorAll('.choice');
     if (btns[+e.key - 1]) btns[+e.key - 1].click();
   } else if (e.key === 'Enter' || e.key === 'ArrowRight') {

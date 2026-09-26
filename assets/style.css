@@ -99,7 +99,7 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
 .score-chip { font-size: 13px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: var(--row); color: var(--ink2); white-space: nowrap; }
 .score-chip.good { background: var(--gold-soft); color: #8a6508; }
 
-.btn { border: 0; border-radius: 999px; padding: 11px 22px; font-weight: 800; font-size: 15px; background: var(--gold); color: var(--navy-ink); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.btn { white-space: nowrap; border: 0; border-radius: 999px; padding: 11px 22px; font-weight: 800; font-size: 15px; background: var(--gold); color: var(--navy-ink); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { background: #f3d273; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.ghost { background: transparent; color: var(--navy-ink); box-shadow: inset 0 0 0 2px var(--row-line); }
@@ -146,6 +146,8 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
 .choice.correct .num { background: var(--gold); border-color: var(--gold); }
 .choice.wrong { background: var(--bad-soft); border-color: var(--bad); color: var(--ink); }
 .choice.wrong .num { background: var(--bad); border-color: var(--bad); color: #fff; }
+.choice.picked { background: #eaf0fa; border-color: var(--navy-ink); color: var(--ink); font-weight: 700; }
+.choice.picked .num { background: var(--navy-ink); border-color: var(--navy-ink); color: var(--gold); }
 .choice.dim { color: var(--muted); }
 .choice.dim .num { border-color: var(--row-line); color: var(--muted); }
 .numrow { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
@@ -159,9 +161,21 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
 /* ── 결과 ── */
 .score { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 4px; }
 .score b { font-size: 64px; font-weight: 800; color: var(--navy-ink); line-height: 1; }
-.score span { font-size: 18px; color: var(--muted); font-weight: 700; }
+.score { flex-wrap: wrap; }
+.score span { font-size: 18px; color: var(--muted); font-weight: 700; word-break: keep-all; }
 .verdict { display: inline-block; margin: 8px 0 14px; }
-.subj { display: grid; grid-template-columns: 64px 1fr 48px; gap: 10px; align-items: center; margin: 8px 0; font-size: 14px; color: var(--ink2); font-weight: 600; }
+.clock { margin-left: auto; margin-right: 10px; color: var(--sub); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.btn.submit { margin-left: auto; margin-right: 6px; }
+.verdict-box { display: flex; align-items: center; gap: 18px; margin: 10px 0 16px; flex-wrap: wrap; }
+.stamp { font-size: 46px; font-weight: 900; letter-spacing: 0.04em; padding: 4px 22px; border-radius: 16px; border: 4px solid; transform: rotate(-4deg); line-height: 1.25; }
+.stamp.pass { color: var(--navy-ink); background: var(--gold); border-color: var(--gold-deep); }
+.stamp.fail { color: var(--bad); background: var(--bad-soft); border-color: var(--bad); }
+.verdict-box .why { display: flex; flex-direction: column; gap: 4px; }
+.verdict-box .why b { font-size: 18px; color: var(--ink); }
+.verdict-box .why span { font-size: 13px; color: var(--muted); }
+.subj .cut { color: var(--bad); font-weight: 800; }
+.score-chip.bad { background: var(--bad-soft); color: var(--bad); }
+.subj { display: grid; grid-template-columns: 64px 1fr 84px; gap: 10px; align-items: center; margin: 8px 0; font-size: 14px; color: var(--ink2); font-weight: 600; }
 .subj .t { height: 10px; background: var(--row); border-radius: 99px; overflow: hidden; }
 .subj .t > i { display: block; height: 100%; background: var(--gold); }
 .subj .t > i.low { background: var(--bad); }
@@ -181,4 +195,11 @@ a.chip:hover, button.chip:hover { background: var(--gold); color: var(--navy-ink
   .brand { font-size: 18px; }
   .num { width: 28px; height: 28px; font-size: 14px; }
   .score b { font-size: 52px; }
+  .score span { font-size: 15px; }
+  .qfoot { gap: 6px; }
+  .qfoot .btn { padding: 10px 14px; font-size: 14px; }
+  .btn.submit { margin-right: 0; }
+  .clock { margin-right: 6px; font-size: 13px; }
+  .titlepill { font-size: 13px; padding: 4px 10px; }
+  .stamp { font-size: 38px; }
 }
