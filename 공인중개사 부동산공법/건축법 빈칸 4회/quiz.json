@@ -36,5 +36,22 @@
    ],
    "answer": 4
   }
- ]
+ ],
+ "video": {
+  "timeline": [
+   {
+    "no": 1,
+    "start": 13.08,
+    "reveal": 35.21,
+    "end": 39.09
+   },
+   {
+    "no": 2,
+    "start": 39.09,
+    "reveal": 60.05,
+    "end": 64.01
+   }
+  ],
+  "youtube": null
+ }
 }
